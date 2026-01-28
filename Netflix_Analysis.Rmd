@@ -1,0 +1,379 @@
+---
+title: "What makes Netflix content successful?"
+subtitle: "Analysis of Netflix's global content strategy"
+output: html_document
+date: "2025-12-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load libraries
+```{r}
+library(tidyverse)
+library(scales)
+library(ggrepel)
+```
+
+## Import the data
+```{r}
+titles <- read.csv("titles.csv")
+
+# Inspect the data
+head(titles)
+summary(titles)
+```
+
+## Pre-process the data
+```{r}
+# Step 1: Extract primary country from production_countries list
+titles_filtered <- titles %>%
+  mutate(
+    production_country = str_extract(production_countries, "^\\[?'?([^',\\]]+)", group = 1),
+    production_country = str_remove_all(production_country, "[\\[\\]']"),
+    production_country = str_trim(production_country)
+  )
+  
+head(titles_filtered %>%
+  select(title, production_countries, production_country)
+)
+```
+
+
+```{r}
+sort(unique(titles_filtered$production_country))
+```
+```{r}
+# Step 2: Group countries into geographical regions
+titles_filtered <- titles_filtered %>%
+  mutate(
+    region = case_when(
+      production_country %in% c("US", "CA", "MX", "PR") ~ "North America",
+      production_country %in% c("GB", "FR", "DE", "ES", "IT", "NL", "BE", "SE", 
+                                "NO", "DK", "FI", "PL", "AT", "CH", "IE", "PT",
+                                "GR", "CZ", "HU", "RO", "UA", "RU", "RS", "BG",
+                                "IS", "LU", "MT", "GL") ~ "Europe",
+      production_country %in% c("JP", "KR", "CN", "IN", "TH", "ID", "PH", 
+                                "MY", "SG", "TW", "HK", "PK", "BD", "KH",
+                                "BT", "GE") ~ "Asia",
+      production_country %in% c("BR", "AR", "CL", "CO", "PE", "VE", "CU") ~ "Latin America",
+      production_country %in% c("TR", "IL", "SA", "AE", "EG", "LB", "JO", 
+                                "IQ", "IR", "QA", "PS") ~ "Middle East",
+      production_country %in% c("AU", "NZ") ~ "Oceania",
+      production_country %in% c("ZA", "NG", "GH", "MA", "CD", "MU") ~ "Africa",
+      production_country %in% c("", "XX", "IO") | is.na(production_country) ~ "Unknown",
+      TRUE ~ "Other"
+    )
+  )
+
+head(titles_filtered %>%
+  select(title, production_countries, production_country, region)
+)
+```
+```{r}
+# Step 3: Extract primary genre from genres list
+titles_filtered <- titles_filtered %>%
+  mutate(
+    genre = str_extract(genres, "^\\[?'?([^',\\]]+)", group = 1),
+    genre = str_remove_all(genre, "[\\[\\]']"),
+    genre = str_trim(genre)
+  )
+
+head(titles_filtered)
+```
+
+
+## Visualisation 1: Exploration - Evolution of Regional Content Released (2001-2021)
+```{r}
+# Define colour gradient according to region
+region_colors <- c(
+  "North America" = "#8B0000",    # Dark red (darkest - largest region)
+  "Europe" = "#CD5C5C",           # Medium red/coral
+  "Asia" = "#F08080",             # Light coral
+  "Latin America" = "#FFA07A",    # Light salmon
+  "Middle East" = "#FFDAB9",      # Peach
+  "Africa" = "#FFE4B5",           # Moccasin
+  "Oceania" = "#FFF8DC"           # Cornsilk (lightest)
+)
+
+# Visualisation 1 data
+regional_time_data <- titles_filtered %>%
+  filter(release_year >= 2001 & 
+         release_year <= 2021,
+         !is.na(region) & region != "Unknown") %>%
+  group_by(release_year, region) %>%
+  summarize(N = n(), .groups = "drop") %>%
+  group_by(region) %>%
+  mutate(region_total = sum(N)) %>%
+  ungroup() %>%
+  mutate(region = fct_reorder(region, region_total, .desc = FALSE))
+
+# Visualisation 1: Stacked bar chart
+viz1 <- ggplot(regional_time_data, aes(x = release_year, y = N, fill = region)) +
+  geom_col(width = 0.8, position = "stack") +
+  scale_fill_manual(values = region_colors, name = "Region") +
+  scale_x_continuous(breaks = seq(2001, 2021, by = 2)) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  labs(
+    title = "Netflix Content Production by Region (2001-2021)",
+    subtitle = "North America dominates but European and Asian content are growing rapidly",
+    x = "Release Year",
+    y = "Number of Titles Released",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0),
+    plot.subtitle = element_text(size = 11, color = "grey40", hjust = 0),
+    plot.caption = element_text(size = 9, color = "grey50"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+viz1
+```
+
+### Visualisation 1 Justification
+This stacked bar chart targets a general audience interested in streaming content trends - such as media analysts, content strategists, and informed consumers. The visualisation assumes moderate visual literacy whereby audiences are familiar with reading bar charts and do not necessarily require statistical expertise. 
+
+Trade-offs in View:
+I first had to pre-process the data by retaining only the primary production country (from titles that had more than one country), group these countries into geographical regions, and retain the primary genre from titles that comprised of more than one genre. The data was then aggregated by counting titles per year and region, then regions were reordered by total production volume. The continuous color gradient from dark to light for each region reinforces the quantitative hierarchy perceptually.
+
+Trade-offs in Focus:
+I focused on 2001-2021 releases as I intended to exclude earlier sparse years and the incomplete 2022 data. This subset focuses on Netflix's global expansion era in the 21st century. I traded off  granular detail about individual titles, genres, or quality metrics. By aggregating to yearly counts, the focus remains on macro-level production patterns rather than content characteristics.
+
+Trade-offs in Sequence:
+As the opening visualisation, this broad exploration establishes the foundational context before moving to focused explanations. Viewers naturally read left-to-right chronologically and can scan vertically to compare years. Placing this first in the sequence grounds the audience in "who produces what, when" before exploring "what types of content".
+
+## Visualisation 2: Explanation - Did North America's share decline because other regions improved in quality?
+```{r}
+# Visualisation 2 data
+quality_over_time <- titles_filtered %>%
+  filter(release_year >= 2001 & 
+         release_year <= 2021,
+         !is.na(region) & region != "Unknown",
+         !is.na(imdb_score)) %>%
+  group_by(release_year, region) %>%
+  summarize(
+    avg_score = mean(imdb_score, na.rm = TRUE),
+    median_score = median(imdb_score, na.rm = TRUE),
+    title_count = n(),
+    .groups = "drop"
+  ) %>%
+  filter(title_count >= 5) # Filter regions with at least 5 titles per year for reliability
+
+# Define colors for line chart
+region_colors_line <- c(
+  "North America" = "#E50914",   # Netflix red
+  "Europe" = "lightblue",        
+  "Asia" = "#FFA500",             # Orange
+  "Latin America" = "lightgrey",
+  "Middle East" = "lightgrey",
+  "Oceania" = "lightgrey",
+  "Africa" = "lightgrey"
+)
+
+# Create line chart showing quality trends
+viz2 <- ggplot(quality_over_time, aes(x = release_year, y = avg_score, color = region)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2, alpha = 0.7) +
+  # Add horizontal reference line at 7.0 (good quality threshold)
+  geom_hline(yintercept = 7.0, linetype = "dashed", color = "gray40", linewidth = 0.8) +
+  annotate("text", x = 2002, y = 7.2, label = "Quality threshold (7.0)", 
+           size = 3, color = "gray40", hjust = 0) +
+  annotate("rect", xmin = 2015, xmax = 2022, ymin = -Inf, ymax = Inf,
+           alpha = 0.05, fill = "red") +
+  annotate("text", x = 2018.5, y = 8.5, 
+           label = "Quality\nConvergence", size = 3.5, fontface = "bold", color = "red") +
+  scale_color_manual(values = region_colors_line, name = "Region") +
+  scale_x_continuous(breaks = seq(2001, 2021, by = 2)) +
+  scale_y_continuous(breaks = seq(5, 9, by = 0.5), limits = c(5.5, 9.0)) +
+  labs(
+    x = "Release Year",
+    y = "Average IMDb Score",
+    title = "Asian Content Quality Converged with North America",
+    subtitle = "Quality improvement post-2015 explains why Netflix invested more in these regions"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11, color = "grey40"),
+    panel.grid.minor = element_blank()
+  )
+
+viz2
+```
+
+### Visualisation 2 Justification
+This visualisation targets the same general audience. The audience must track individual lines across time and interpret trend convergence. In Visualisation 1, it is observed that Asia and Europe are seeing growth in content released on Netflix over the recent years. Therefore in visualisation 2, the focus shifts from production volume to content quality (IMDb scores) as a possible explanation of such growth. Strategic color choices (highlighting North America, Europe, and Asia while graying out others) guide attention and reduce cognitive overload. The reference line at 7.0 and shaded annotation provide scaffolding for less experienced viewers to understand quality benchmarks and the convergence period.
+
+Trade-offs in View:
+The data was transformed by calculating mean scores per region-year and filtering for reliability (minimum 5 titles). This encoding prioritises content quality (in terms of rating) over volume, trading off information about production scale (shown in Viz 1) for quality patterns. Line charts excel at showing change over time but can become cluttered. A such, I mitigated this by de-emphasising less relevant regions with gray, and only keeping colour for the top 3 regions, hence making the North America-Asia convergence narrative clearer.
+
+Trade-offs in Focus:
+I maintained the same 2001-2021 timeframe for consistency, filtered for regions with at least 5 titles per year for statistical reliability. The aspects shown are average quality trends, but this aggregation masks within-region variation and genre differences. The shaded 2015-2021 period explicitly focuses attention on the convergence phenomenon rather than earlier divergent patterns.
+
+Trade-offs in Sequence:
+Positioned as the second visualisation, this directly answers the explanatory question raised by Viz 1: why did other regions grow in production? The sequence moves from exploration (what happened) to explanation (why it happened), with quality convergence providing the causal narrative. Viewers naturally compare this temporal pattern against Viz 1's production growth, reinforcing the insight that quality improvement drove Netflix's regional investment strategy.
+
+## Visualisation 3: Exploration - Number of titles released in Asian countries 
+```{r}
+# Filter for top Asian countries
+asian_countries_time <- titles_filtered %>%
+  filter(region == "Asia",
+         release_year >= 2001 & release_year <= 2021) %>%
+  group_by(release_year, production_country) %>%
+  summarize(N = n(), .groups = "drop") %>%
+  # Get top 5 Asian countries by total production
+  group_by(production_country) %>%
+  mutate(total = sum(N)) %>%
+  ungroup() %>%
+  filter(production_country %in% (
+    group_by(., production_country) %>%
+    summarize(total = sum(N)) %>%
+    arrange(desc(total)) %>%
+    head(5) %>%
+    pull(production_country)
+  ))
+
+# Country name mapping
+asian_country_names <- c(
+  "IN" = "India",
+  "JP" = "Japan", 
+  "KR" = "South Korea",
+  "CN" = "China",
+  "TH" = "Thailand",
+  "ID" = "Indonesia",
+  "PH" = "Philippines",
+  "TW" = "Taiwan",
+  "HK" = "Hong Kong"
+)
+
+asian_countries_time <- asian_countries_time %>%
+  mutate(country_name = ifelse(production_country %in% names(asian_country_names),
+                               asian_country_names[production_country],
+                               production_country))
+
+# Define colors for Asian countries
+asian_country_colors <- c(
+  "India" = "#FF6B35",
+  "Japan" = "#004E89",
+  "South Korea" = "#F77F00",
+  "China" = "#06A77D",
+  "Thailand" = "#D62828"
+)
+
+viz3 <- ggplot(asian_countries_time, aes(x = release_year, y = N, fill = country_name)) +
+  geom_area(alpha = 0.8, position = "stack") +
+  scale_fill_manual(values = asian_country_colors, name = "Country") +
+  scale_x_continuous(breaks = seq(2001, 2021, by = 2)) +
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.05))) +
+  labs(
+    x = "Release Year",
+    y = "Number of Titles Released",
+    title = "India, Japan, and South Korea Drive Asian Content Growth",
+    subtitle = "Three countries account for the majority of Asia's Netflix expansion"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11, color = "grey40")
+  )
+
+viz3
+```
+
+### Visualisation 3 Justification
+
+This visualisation maintains accessibility for the general audience while introducing the area chart format. The smooth, flowing areas are visually intuitive, and limiting to five countries prevents overwhelming viewers. The legend at the bottom and clear country labels accommodate moderate visual literacy, while distinct colors aid differentiation without requiring advanced interpretation skills.
+
+Trade-offs in View:
+I used stacked areas to show both individual country contributions and total Asian growth. The data was transformed by filtering for the top 5 Asian countries by total production volume, then aggregating yearly counts per country. Area charts create a sense of continuous flow and cumulative magnitude that reinforces the growth narrative more effectively than bars or lines. However, this encoding trades off precise value reading for countries in the middle positions, similar to stacked bars but with softer visual transitions that emphasize momentum.
+
+Trade-offs in Focus:
+The focus narrows dramatically from all regions (Viz 1-2) to Asia specifically, and further to just the top 5 producing countries. This drill-down sacrifices breadth for depth, excluding smaller Asian producers but enabling clear identification of the key drivers. The aspects shown are country-level production volumes over time, answering "which Asian countries matter most?" but losing information about quality, genres, or inter-country differences beyond production scale. The 2001-2021 timeframe remains consistent with previous visualisations.
+
+Trade-offs in Sequence:
+As the third visualisation, this provides granular detail that explains Viz 2's finding about Asian quality convergence—revealing that India, Japan, and South Korea are the specific engines of growth. The sequence moves from regional overview (Viz 1) to cross-regional explanation (Viz 2) to within-region exploration (Viz 3), progressively zooming into finer detail while maintaining narrative coherence.
+
+
+## Visualisation 4: Explanation - Asian countries excel in specific genres
+```{r}
+# Analyze top genres by Asian country
+asian_genre_specialization <- titles_filtered %>%
+  filter(region == "Asia",
+         production_country %in% c("IN", "JP", "KR"),
+         !is.na(genre)) %>%
+  group_by(production_country, genre) %>%
+  summarize(
+    title_count = n(),
+    avg_score = mean(imdb_score, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(production_country) %>%
+  # Get top 5 genres per country
+  arrange(desc(title_count)) %>%
+  slice_head(n = 5) %>%
+  ungroup() %>%
+  mutate(
+    country_name = case_when(
+      production_country == "IN" ~ "India",
+      production_country == "JP" ~ "Japan",
+      production_country == "KR" ~ "South Korea"
+    ),
+    # Highlight high-performing genres
+    high_quality = avg_score >= 7.0
+  )
+
+viz4 <- ggplot(asian_genre_specialization, 
+               aes(x = reorder(genre, title_count), 
+                   y = title_count, 
+                   fill = high_quality)) +
+  geom_col() +
+  scale_fill_manual(
+    values = c("TRUE" = "#E50914", "FALSE" = "#CCCCCC"),
+    labels = c("TRUE" = "High Quality (≥7.0)", "FALSE" = "Below 7.0"),
+    name = "Average IMDb Score"
+  ) +
+  facet_wrap(~country_name, ncol = 3, scales = "free_y") +
+  labs(
+    x = NULL,
+    y = "Number of Titles",
+    title = "Asian Countries Succeed Through Genre Specialization",
+    subtitle = "Japan excels in animation while South Korea in dramas"
+  ) +
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    plot.title = element_text(face = "bold", size = 14),
+    plot.subtitle = element_text(size = 11, color = "grey40"),
+    strip.text = element_text(face = "bold", size = 11),
+    panel.spacing = unit(1.5, "lines"),
+    axis.text.y = element_text(size = 9)
+  )
+
+viz4
+```
+
+### Visualisation 4 Justification
+This visualisation maintains accessibility while introducing faceted comparisons — a technique that requires moderate visual literacy to process multiple panels simultaneously. The horizontal bar chart format is highly intuitive, and faceting by country creates clear visual separation that prevents confusion. The binary color scheme (Netflix Red for high quality, gray for below threshold) communicates success simply without requiring interpretation of continuous scales, making patterns accessible even to viewers with basic chart literacy.
+
+Trade-offs in View:
+I used position (bar length) for title counts and color (binary hue) for quality classification, with facets creating small multiples by country. The data was transformed by filtering to top 3 Asian countries, then extracting top 5 genres per country, and dichotomising IMDb scores at the 7.0 threshold. I chose horizontal bars with `coord_flip()` to accommodate longer genre names better than vertical bars. The binary color encoding trades off precise score information for immediate pattern recognition—viewers instantly see which genres succeed rather than comparing exact numerical scores. Free y-scales allow independent genre ordering within each facet, though this sacrifices direct cross-country genre comparisons.
+
+Trade-offs in Focus:
+The focus narrows further to genre composition within only India, Japan, and South Korea (top 3 from Viz 3), showing top 5 genres per country. This deep drill-down sacrifices information about other Asian countries, minor genres, and precise quality scores. The aspects shown are genre popularity and quality classification, revealing specialisation patterns but loses temporal dynamics, individual title variation, and audience metrics. The quality threshold at 7.0 creates a clear success benchmark but simplifies the nuanced quality spectrum.
+
+Trade-offs in Sequence:
+As the final visualisation, this provides the deepest level of detail, explaining how these countries achieved quality convergence (Viz 2) and growth (Viz 3)—through strategic genre specialization. The sequence completes the narrative arc: regional overview → quality convergence → country drivers → genre specialization strategies. Viewers can now connect all insights into a cohesive story about Netflix's Asian content strategy.
+
