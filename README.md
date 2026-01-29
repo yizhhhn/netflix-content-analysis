@@ -71,11 +71,3 @@ I employed a **sequential exploratory-explanatory framework** to move from broad
 
 **Visualisation Design Principles:**
 This analysis follows the Grammar of Graphics framework and data visualisation best practices from Kieran Healy's *Data Visualization: A Practical Introduction*.
-
-## 📂 Repository Structure
-```
-├── netflix_analysis.Rmd          # Main analysis file
-├── titles.csv                     # Dataset
-├── README.md                      # This file
-└── figures/                       # Generated visualizations
-```
